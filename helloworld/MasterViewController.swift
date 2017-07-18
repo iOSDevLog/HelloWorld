@@ -7,20 +7,18 @@
 //
 
 import UIKit
+import ActionSheetPicker_3_0
 
 class MasterViewController: UITableViewController {
-
+    
     var detailViewController: DetailViewController? = nil
-    var objects = [Any]()
-
+    var languages = [[String]]()
+    var titles: [String]!
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view, typically from a nib.
-        navigationItem.leftBarButtonItem = editButtonItem
-
-        let addButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(insertNewObject(_:)))
-        navigationItem.rightBarButtonItem = addButton
+        initData()
+        
         if let split = splitViewController {
             let controllers = split.viewControllers
             detailViewController = (controllers[controllers.count-1] as! UINavigationController).topViewController as? DetailViewController
@@ -32,25 +30,61 @@ class MasterViewController: UITableViewController {
         super.viewWillAppear(animated)
     }
 
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        // Dispose of any resources that can be recreated.
+    func initData() {
+        let resourcePath = Bundle.main.resourcePath?.appending("/hello-world/")
+        
+        do {
+            titles = try FileManager.default.contentsOfDirectory(atPath: resourcePath!)
+            
+            for title in titles {
+                let subResourcePath = resourcePath?.appending(title)
+                let language = try FileManager.default.contentsOfDirectory(atPath: subResourcePath!)
+                languages.append(language)
+            }
+        } catch let e {
+            print(e)
+        }
     }
-
-    func insertNewObject(_ sender: Any) {
-        objects.insert(NSDate(), at: 0)
-        let indexPath = IndexPath(row: 0, section: 0)
-        tableView.insertRows(at: [indexPath], with: .automatic)
+    
+    @IBAction func pickTheme(_ sender: UIBarButtonItem) {
+        let themes = HighlightModel.sharedInstance.highlightr.availableThemes()
+        let indexOrNil = themes.index(of: (self.title?.lowercased())!)
+        let index = (indexOrNil == nil) ? 0 : indexOrNil!
+        
+        ActionSheetStringPicker.show(withTitle: "Pick a Theme",
+                                     rows: themes,
+                                     initialSelection: index,
+                                     doneBlock:
+            {
+                picker, index, value in
+                let theme = value! as! String
+                HighlightModel.sharedInstance.textStorage.highlightr.setTheme(to: theme)
+                self.title = theme.capitalized
+                self.updateColors()
+        },
+                                     cancel: nil,
+                                     origin: sender)
+        
     }
-
+    
+    func updateColors() {
+        let navBar = self.navigationController!.navigationBar
+        navBar.barTintColor = HighlightModel.sharedInstance.highlightr.theme.themeBackgroundColor
+        navBar.tintColor = HighlightModel.sharedInstance.invertColor((navBar.barTintColor!))
+        self.tableView.backgroundColor = navBar.tintColor.withAlphaComponent(0.5)
+        self.tableView.reloadData()
+    }
+    
     // MARK: - Segues
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "showDetail" {
             if let indexPath = tableView.indexPathForSelectedRow {
-                let object = objects[indexPath.row] as! NSDate
+                let language = titles[indexPath.section]
+                let helloworld = languages[indexPath.section][indexPath.row]
                 let controller = (segue.destination as! UINavigationController).topViewController as! DetailViewController
-                controller.detailItem = object
+                let resourcePath = Bundle.main.resourcePath?.appending("/hello-world/").appending("\(language)/\(helloworld)")
+                controller.detailItem = resourcePath
                 controller.navigationItem.leftBarButtonItem = splitViewController?.displayModeButtonItem
                 controller.navigationItem.leftItemsSupplementBackButton = true
             }
@@ -60,35 +94,35 @@ class MasterViewController: UITableViewController {
     // MARK: - Table View
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return 1
+        return languages.count
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return objects.count
+        let language = languages[section]
+        return language.count
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
-
-        let object = objects[indexPath.row] as! NSDate
-        cell.textLabel!.text = object.description
+        let language = languages[indexPath.section]
+        let helloworld = language[indexPath.row]
+        let names = helloworld.components(separatedBy: ".")
+        cell.textLabel!.text = names[0]
+        if (names.count > 1) {
+            cell.detailTextLabel?.text = names[1]
+        }
+        cell.textLabel?.textColor = self.navigationController!.navigationBar.tintColor
+        cell.detailTextLabel?.textColor = cell.textLabel?.textColor.withAlphaComponent(0.8)
+        cell.backgroundColor = self.navigationController?.navigationBar.barTintColor
         return cell
     }
-
-    override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-        // Return false if you do not want the specified item to be editable.
-        return true
+    
+    override func sectionIndexTitles(for tableView: UITableView) -> [String]? {
+        return titles
     }
-
-    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete {
-            objects.remove(at: indexPath.row)
-            tableView.deleteRows(at: [indexPath], with: .fade)
-        } else if editingStyle == .insert {
-            // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
-        }
+    
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        return titles[section]
     }
-
-
 }
 
